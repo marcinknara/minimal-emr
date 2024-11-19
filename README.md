@@ -1,4 +1,24 @@
-# Minimal EMR Management System
+# Minimal EMR Management System Application
+
+This application allows case managers to track and manage patient data locally.
+
+How to Use:
+1. Extract the ZIP file.
+2. Run the application by double-clicking the executable:
+   - Windows: `emr_app.exe`
+   - macOS/Linux: `emr_app`
+
+Features:
+- Add/Edit/Delete patients.
+- Manage weekly data for each patient.
+- Export patient data and charts to Excel files.
+
+Dependencies:
+- JSON files (`patients.json`, `questions.json`, `patient_data.json`) must remain in the same directory as the application.
+
+Enjoy using the EMR Application!
+
+## Technical ReadMe Below
 
 This application is a minimal EMR (Electronic Medical Records) management system designed to handle patient cases. It stores all the data locally and is run using Python.
 
