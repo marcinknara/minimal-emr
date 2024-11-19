@@ -2,15 +2,17 @@ import sys
 import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, 
-    QTableWidget, QTableWidgetItem, QLineEdit, QMessageBox, QHBoxLayout, QFormLayout, QLabel, QCheckBox
+    QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout, QCheckBox
 )
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.QtCore import Qt
 import os
-from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QFileDialog
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
+import tempfile
+
+DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 class EMRManager(QMainWindow):
     def __init__(self):
@@ -44,9 +46,9 @@ class EMRManager(QMainWindow):
         delete_button.clicked.connect(self.delete_patient)
         self.main_layout.addWidget(delete_button)
         
-        export_button = QPushButton("Export Patient Data")
-        export_button.clicked.connect(self.export_data)
-        self.main_layout.addWidget(export_button)
+        # export_button = QPushButton("Export Patient Data")
+        # export_button.clicked.connect(self.export_data)
+        # self.main_layout.addWidget(export_button)
         
         # Set up the main widget
         self.main_widget.setLayout(self.main_layout)
@@ -62,58 +64,70 @@ class EMRManager(QMainWindow):
         
         # Load questions
         self.questions = self.load_questions()
-    
+
     def load_patients(self):
         try:
-            with open("patients.json", "r") as file:
+            path = get_resource_path("patients.json")
+            print(f"Loading patients from: {path}")  # Debugging information
+            if not os.path.exists(path):
+                with open(path, "w") as file:
+                    json.dump([], file, indent=4)
+                    print("Created new patients.json file.")  # Debugging information
+            with open(path, "r") as file:
                 return json.load(file)
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            QMessageBox.warning(self, "Error", f"Failed to load patients: {str(e)}")
             return []
     
     def save_patients(self):
-        with open("patients.json", "w") as file:
-            json.dump(self.patients, file, indent=4)
+        try:
+            with open(get_resource_path("patients.json"), "w") as file:
+                json.dump(self.patients, file, indent=4)
+        except IOError as e:
+            QMessageBox.critical(self, "Error", f"Failed to save patients: {str(e)}")
 
     def populate_table(self):
         """Populate the patient table."""
-        self.patient_table.blockSignals(True)  # Prevent triggering cellChanged during population
+        self.patient_table.blockSignals(True)
         self.patient_table.setRowCount(0)
         for i, patient in enumerate(self.patients):
-            self.patient_table.insertRow(i)
-            
-            # ID column (non-editable)
-            id_item = QTableWidgetItem(str(patient["id"]))
-            id_item.setFlags(Qt.ItemIsEnabled)
-            self.patient_table.setItem(i, 0, id_item)
-            
-            # Name column (editable)
-            name_item = QTableWidgetItem(patient["name"])
-            name_item.setFlags(name_item.flags() | Qt.ItemIsEditable)
-            self.patient_table.setItem(i, 1, name_item)
-            
-            # Age column (editable)
-            age_item = QTableWidgetItem(str(patient["age"]))
-            age_item.setFlags(age_item.flags() | Qt.ItemIsEditable)
-            self.patient_table.setItem(i, 2, age_item)
-            
-            # Data button
-            data_button = QPushButton("Data")
-            data_button.clicked.connect(lambda _, p=patient: self.open_data_screen(p))
-            self.patient_table.setCellWidget(i, 3, data_button)
-        self.patient_table.blockSignals(False)  # Re-enable signals
+            try:
+                self.patient_table.insertRow(i)
+                id_item = QTableWidgetItem(str(patient.get("id", i + 1)))
+                id_item.setFlags(Qt.ItemIsEnabled)
+                self.patient_table.setItem(i, 0, id_item)
+
+                name_item = QTableWidgetItem(patient.get("name", f"Patient {i + 1}"))
+                name_item.setFlags(name_item.flags() | Qt.ItemIsEditable)
+                self.patient_table.setItem(i, 1, name_item)
+
+                age_item = QTableWidgetItem(str(patient.get("age", 30)))
+                age_item.setFlags(age_item.flags() | Qt.ItemIsEditable)
+                self.patient_table.setItem(i, 2, age_item)
+
+                data_button = QPushButton("Data")
+                data_button.clicked.connect(lambda _, p=patient: self.open_data_screen(p))
+                self.patient_table.setCellWidget(i, 3, data_button)
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Error populating patient row {i}: {str(e)}")
+        self.patient_table.blockSignals(False)
     
     def update_patient_data(self, row, column):
         """Update the patient data based on table edits."""
-        if column == 1:  # Name column
-            self.patients[row]["name"] = self.patient_table.item(row, column).text()
-        elif column == 2:  # Age column
-            try:
-                self.patients[row]["age"] = int(self.patient_table.item(row, column).text())
-            except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Age must be a number.")
-                self.populate_table()  # Revert invalid input
-                return
-        self.save_patients()
+        try:
+            if column == 1:  # Name column
+                self.patients[row]["name"] = self.patient_table.item(row, column).text().strip()
+                if not self.patients[row]["name"]:
+                    raise ValueError("Name cannot be empty.")
+            elif column == 2:  # Age column
+                age = int(self.patient_table.item(row, column).text().strip())
+                if age <= 0:
+                    raise ValueError("Age must be a positive number.")
+                self.patients[row]["age"] = age
+            self.save_patients()
+        except ValueError as e:
+            QMessageBox.warning(self, "Invalid Input", str(e))
+            self.populate_table()  # Revert invalid input
     
     def add_patient(self):
         """Add a new patient."""
@@ -133,8 +147,7 @@ class EMRManager(QMainWindow):
         self.save_questions()  # Save the questions to the JSON file
 
     def save_questions(self):
-        """Save the questions to the questions.json file."""
-        with open("questions.json", "w") as file:
+        with open(get_resource_path("questions.json"), "w") as file:
             json.dump(self.questions, file, indent=4)
     
     def delete_patient(self):
@@ -164,15 +177,18 @@ class EMRManager(QMainWindow):
         self.save_patients()
         self.populate_table()
     
+    
     def load_questions(self):
-        try:
-            with open("questions.json", "r") as file:
-                return json.load(file)
-        except FileNotFoundError:
-            return [
+        path = get_resource_path("questions.json")
+        if not os.path.exists(path):
+            default_questions = [
                 {"text": "Question 1", "type": "Quantitative"},
                 {"text": "Question 2", "type": "Qualitative"},
             ]
+            with open(path, "w") as file:
+                json.dump(default_questions, file, indent=4)
+        with open(path, "r") as file:
+            return json.load(file)  
     
     def open_data_screen(self, patient):
         """Open the Data screen for the selected patient."""
@@ -186,11 +202,24 @@ class EMRManager(QMainWindow):
             self.save_questions_from_settings  # Pass the method as a callback
         )
         self.edit_data_window.show()
-    
-    def export_data(self):
-        """Export patient data to a file."""
-        print("Export patient data to CSV/Excel/PDF")
 
+    # def export_data(self):
+    #     """Export patient data to a file."""
+    #     print("Export patient data to CSV/Excel/PDF")
+
+def get_resource_path(filename):
+    """Get the absolute path to the resource file in the resources folder."""
+    if getattr(sys, 'frozen', False):  # Running as a PyInstaller bundle
+        base_path = os.path.dirname(sys.executable)  # Directory of the executable
+    else:
+        base_path = os.path.abspath(".")  # Current working directory for development
+
+    # Ensure the resources directory exists
+    resources_path = os.path.join(base_path, "resources")
+    os.makedirs(resources_path, exist_ok=True)
+
+    # Return the path to the specific file inside the resources folder
+    return os.path.join(resources_path, filename)
 
 class DataScreen(QWidget):
     def __init__(self, patient, questions):
@@ -256,13 +285,20 @@ class DataScreen(QWidget):
     
     def save_data(self):
         """Save weekly data for the patient."""
-        for row in range(self.data_table.rowCount()):
-            question = self.data_table.item(row, 0).text()
-            self.patient_data[question] = {}
-            for col, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], start=1):
-                item = self.data_table.item(row, col)
-                value = item.text() if item else ""
-                self.patient_data[question][day] = value
+        try:
+            for row in range(self.data_table.rowCount()):
+                question = self.data_table.item(row, 0).text()
+                self.patient_data[question] = {}
+                for col, day in enumerate(DAYS_OF_WEEK, start=1):
+                    item = self.data_table.item(row, col)
+                    value = item.text() if item else ""
+                    self.patient_data[question][day] = value
+            self.save_patient_data()
+            QMessageBox.information(self, "Saved", "Patient data has been updated.")
+            self.update_chart()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save data: {str(e)}")
+            print(f"Error in save_data: {e}")  # Debugging information
         
         # Save the data to the file
         self.save_patient_data()
@@ -300,71 +336,90 @@ class DataScreen(QWidget):
     def load_patient_data(self):
         """Load existing patient data for the specific patient."""
         try:
-            with open("patient_data.json", "r") as file:
-                all_data = json.load(file)
-                return all_data.get(str(self.patient["id"]), {})
-        except FileNotFoundError:
+            path = get_resource_path("patient_data.json")
+            if os.path.exists(path):
+                with open(path, "r") as file:
+                    all_data = json.load(file)
+                    return all_data.get(str(self.patient["id"]), {})  # Load only this patient's data
+            else:
+                return {}
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load patient data: {str(e)}")
+            print(f"Error loading patient data: {e}")  # Debugging information
             return {}
+
     
     def save_patient_data(self):
         """Save the patient's data to a persistent file."""
         try:
-            with open("patient_data.json", "r") as file:
-                all_data = json.load(file)
-        except FileNotFoundError:
+            path = get_resource_path("patient_data.json")
             all_data = {}
-        
-        # Update the specific patient's data
-        all_data[str(self.patient["id"])] = self.patient_data
-        
-        # Save back to the file
-        with open("patient_data.json", "w") as file:
-            json.dump(all_data, file, indent=4)
+            
+            # Load existing data if file exists
+            if os.path.exists(path):
+                with open(path, "r") as file:
+                    all_data = json.load(file)
+            
+            # Update this patient's data
+            all_data[str(self.patient["id"])] = self.patient_data
+            
+            # Write back to file
+            with open(path, "w") as file:
+                json.dump(all_data, file, indent=4)
+            print(f"Saved patient data for ID {self.patient['id']} to {path}")  # Debugging information
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save patient data: {str(e)}")
+            print(f"Error saving patient data: {e}")  # Debugging information
     
     def export_to_excel(self):
-        """Export patient data and chart to an Excel file."""
-        # Ask for a save location
-        save_path, _ = QFileDialog.getSaveFileName(self, "Save File", f"{self.patient['name']}_data.xlsx", "Excel Files (*.xlsx)")
-        if not save_path:
-            return
-        
-        # Create the Excel workbook and sheet
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"Data for {self.patient['name']}"
-        
-        # Write patient details
-        ws.append(["Patient Name:", self.patient["name"]])
-        ws.append(["Patient Age:", self.patient["age"]])
-        ws.append([])
-        
-        # Write the data table headers
-        headers = ["Question", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        ws.append(headers)
-        
-        # Write the data table rows
-        for question, weekly_data in self.patient_data.items():
-            row = [question]
-            for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]:
-                row.append(weekly_data.get(day, ""))
-            ws.append(row)
-        
-        # Save the chart as an image
-        chart_image_path = f"{self.patient['name']}_chart.png"
-        chart_pixmap = self.chart_view.grab()
-        chart_pixmap.save(chart_image_path)
-        
-        # Add the chart image to the Excel sheet
-        img = Image(chart_image_path)
-        ws.add_image(img, "H2")
-        
-        # Save the Excel file
-        wb.save(save_path)
-        
-        # Clean up the temporary image file
-        os.remove(chart_image_path)
-        
-        QMessageBox.information(self, "Exported", f"Data for {self.patient['name']} has been exported to {save_path}.")
+        try:
+            # Ask for a save location for the Excel file
+            save_path, _ = QFileDialog.getSaveFileName(
+                self, "Save File", f"{self.patient['name']}_data.xlsx", "Excel Files (*.xlsx)"
+            )
+            if not save_path:
+                return
+
+            # Create a temporary directory for the chart image
+            temp_dir = tempfile.gettempdir()
+            chart_image_path = os.path.join(temp_dir, f"{self.patient['name']}_chart.png")
+
+            # Create Excel workbook
+            wb = Workbook()
+            ws = wb.active
+            ws.title = f"Data for {self.patient['name']}"
+
+            ws.append(["Patient Name:", self.patient["name"]])
+            ws.append(["Patient Age:", self.patient["age"]])
+            ws.append([])
+
+            # Add headers
+            ws.append(["Question"] + DAYS_OF_WEEK)
+
+            for question, weekly_data in self.patient_data.items():
+                row = [question]
+                for day in DAYS_OF_WEEK:
+                    row.append(weekly_data.get(day, ""))
+                ws.append(row)
+
+            # Add chart image
+            try:
+                chart_pixmap = self.chart_view.grab()
+                chart_pixmap.save(chart_image_path)
+                img = Image(chart_image_path)
+                ws.add_image(img, "H2")
+            except Exception as e:
+                QMessageBox.warning(self, "Warning", f"Failed to add chart image: {str(e)}")
+
+            # Save the Excel file
+            wb.save(save_path)
+            QMessageBox.information(self, "Exported", f"Data exported to {save_path}.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export data: {str(e)}")
+        finally:
+            # Clean up temporary files
+            if os.path.exists(chart_image_path):
+                os.remove(chart_image_path)
 
 
 class EditDataScreen(QWidget):
