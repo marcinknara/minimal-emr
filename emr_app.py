@@ -1,5 +1,6 @@
 import sys
 import json
+import uuid
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, 
     QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout, QCheckBox
@@ -7,7 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.QtCore import Qt, QDate
 import os
-from PyQt5.QtWidgets import QFileDialog, QDateEdit, QLabel
+from PyQt5.QtWidgets import QFileDialog, QLabel
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
@@ -46,10 +47,6 @@ class EMRManager(QMainWindow):
         delete_button.clicked.connect(self.delete_patient)
         self.main_layout.addWidget(delete_button)
         
-        # export_button = QPushButton("Export Patient Data")
-        # export_button.clicked.connect(self.export_data)
-        # self.main_layout.addWidget(export_button)
-        
         # Set up the main widget
         self.main_widget.setLayout(self.main_layout)
         self.setCentralWidget(self.main_widget)
@@ -71,13 +68,13 @@ class EMRManager(QMainWindow):
             print(f"Loading patients from: {path}")  # Debugging information
             if not os.path.exists(path):
                 with open(path, "w") as file:
-                    json.dump([], file, indent=4)
+                    json.dump({}, file, indent=4)
                     print("Created new patients.json file.")  # Debugging information
             with open(path, "r") as file:
                 return json.load(file)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             QMessageBox.warning(self, "Error", f"Failed to load patients: {str(e)}")
-            return []
+            return {}
     
     def save_patients(self):
         try:
@@ -90,24 +87,22 @@ class EMRManager(QMainWindow):
         """Populate the patient table."""
         self.patient_table.blockSignals(True)
         self.patient_table.setRowCount(0)
-        for i, patient in enumerate(self.patients):
+        for uuid_key, patient in self.patients.items():
             try:
-                self.patient_table.insertRow(i)
-                id_item = QTableWidgetItem(str(patient.get("id", i + 1)))
-                id_item.setFlags(Qt.ItemIsEnabled)
-                self.patient_table.setItem(i, 0, id_item)
+                row = self.patient_table.rowCount()
+                self.patient_table.insertRow(row)
 
-                name_item = QTableWidgetItem(patient.get("name", f"Patient {i + 1}"))
+                name_item = QTableWidgetItem(patient.get("name", "Unnamed Patient"))
                 name_item.setFlags(name_item.flags() | Qt.ItemIsEditable)
-                self.patient_table.setItem(i, 1, name_item)
+                self.patient_table.setItem(row, 0, name_item)
 
                 age_item = QTableWidgetItem(str(patient.get("age", 30)))
                 age_item.setFlags(age_item.flags() | Qt.ItemIsEditable)
-                self.patient_table.setItem(i, 2, age_item)
+                self.patient_table.setItem(row, 1, age_item)
 
                 data_button = QPushButton("Data")
-                data_button.clicked.connect(lambda _, p=patient: self.open_data_screen(p))
-                self.patient_table.setCellWidget(i, 3, data_button)
+                data_button.clicked.connect(lambda _, uuid_key=uuid_key: self.open_data_screen(uuid_key))
+                self.patient_table.setCellWidget(row, 2, data_button)
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Error populating patient row {i}: {str(e)}")
         self.patient_table.blockSignals(False)
@@ -115,15 +110,16 @@ class EMRManager(QMainWindow):
     def update_patient_data(self, row, column):
         """Update the patient data based on table edits."""
         try:
-            if column == 1:  # Name column
-                self.patients[row]["name"] = self.patient_table.item(row, column).text().strip()
-                if not self.patients[row]["name"]:
+            patient_uuid = list(self.patients.keys())[row]
+            if column == 0:  # Name column
+                self.patients[patient_uuid]["name"] = self.patient_table.item(row, column).text().strip()
+                if not self.patients[patient_uuid]["name"]:
                     raise ValueError("Name cannot be empty.")
-            elif column == 2:  # Age column
+            elif column == 1:  # Age column
                 age = int(self.patient_table.item(row, column).text().strip())
                 if age <= 0:
                     raise ValueError("Age must be a positive number.")
-                self.patients[row]["age"] = age
+                self.patients[patient_uuid]["age"] = age
             self.save_patients()
         except ValueError as e:
             QMessageBox.warning(self, "Invalid Input", str(e))
@@ -131,13 +127,13 @@ class EMRManager(QMainWindow):
     
     def add_patient(self):
         """Add a new patient."""
+        new_patient_uuid = str(uuid.uuid4())  # Generate a unique UUID for the new patient
         new_patient = {
-            "id": len(self.patients) + 1,
-            "name": f"New Patient {len(self.patients) + 1}",
+            "name": "New Patient",
             "age": 30,
             "records": {}
         }
-        self.patients.append(new_patient)
+        self.patients[new_patient_uuid] = new_patient
         self.save_patients()
         self.populate_table()
 
@@ -158,7 +154,8 @@ class EMRManager(QMainWindow):
             return
         
         # Confirm deletion
-        patient_name = self.patient_table.item(selected_row, 1).text()
+        patient_uuid = list(self.patients.keys())[selected_row]
+        patient_name = self.patients[patient_uuid]["name"]
         confirmation = QMessageBox.question(
             self, 
             "Confirm Deletion", 
@@ -168,12 +165,7 @@ class EMRManager(QMainWindow):
         if confirmation == QMessageBox.No:
             return
         
-        del self.patients[selected_row]
-        
-        # Reassign IDs to maintain sequence
-        for i, patient in enumerate(self.patients):
-            patient["id"] = i + 1
-        
+        del self.patients[patient_uuid]
         self.save_patients()
         self.populate_table()
     
@@ -190,10 +182,13 @@ class EMRManager(QMainWindow):
         with open(path, "r") as file:
             return json.load(file)  
     
-    def open_data_screen(self, patient):
+    def open_data_screen(self, patient_uuid):
         """Open the Data screen for the selected patient."""
-        self.data_window = DataScreen(patient, self.questions)
-        self.data_window.show()
+        if patient_uuid in self.patients:
+            self.data_window = DataScreen(patient_uuid, self.questions, self.patients)
+            self.data_window.show()
+        else:
+            QMessageBox.warning(self, "Error", "Patient UUID not found.")
     
     def open_edit_data_screen(self):
         """Open the Edit Data screen."""
@@ -222,39 +217,45 @@ def get_resource_path(filename):
     return os.path.join(resources_path, filename)
 
 class DataScreen(QWidget):
-    def __init__(self, patient, questions):
+    def __init__(self, patient_uuid, questions, patients):
         super().__init__()
-        self.setWindowTitle(f"Data for {patient['name']}")
+        self.patient_uuid = patient_uuid
+        self.patient = patients[self.patient_uuid]  # Retrieve patient data using UUID
+        self.questions = questions
+        self.setWindowTitle(f"Data for {self.patient['name']}")
         self.setGeometry(100, 100, 800, 600)
-        
-        self.patient = patient  # Patient's reference
-        self.questions = questions  # Questions list
 
         # Load existing patient data
         self.patient_data = self.load_patient_data()
+
+        # Initialize current date range (Monday to Friday)
+        today = QDate.currentDate()
+        self.start_date = self.get_week_start_date(today)
+        self.end_date = self.start_date.addDays(4)
         
-        # Main layout
+        # Build UI layout
+        self.build_ui()
+        self.populate_table()
+        self.update_chart()
+
+    def build_ui(self):
+        """Build the UI layout for the data screen."""
         layout = QVBoxLayout()
 
         # Date Range Input
         date_range_layout = QHBoxLayout()
-        self.start_date = QDateEdit(calendarPopup=True)
-        self.end_date = QDateEdit(calendarPopup=True)
-
-        # Set default dates
-        today = QDate.currentDate()
-        self.start_date.setDate(today)
-        self.end_date.setDate(today.addDays(6))
-
-        # Load saved dates if available
-        if "start_date" in self.patient_data and "end_date" in self.patient_data:
-            self.start_date.setDate(QDate.fromString(self.patient_data["start_date"], "yyyy-MM-dd"))
-            self.end_date.setDate(QDate.fromString(self.patient_data["end_date"], "yyyy-MM-dd"))
-
+        self.start_date_label = QLabel(self.start_date.toString("yyyy-MM-dd"))
+        self.end_date_label = QLabel(self.end_date.toString("yyyy-MM-dd"))
+        prev_week_button = QPushButton("Previous Week")
+        next_week_button = QPushButton("Next Week")
+        prev_week_button.clicked.connect(self.go_to_previous_week)
+        next_week_button.clicked.connect(self.go_to_next_week)
         date_range_layout.addWidget(QLabel("Start Date:"))
-        date_range_layout.addWidget(self.start_date)
+        date_range_layout.addWidget(self.start_date_label)
         date_range_layout.addWidget(QLabel("End Date:"))
-        date_range_layout.addWidget(self.end_date)
+        date_range_layout.addWidget(self.end_date_label)
+        date_range_layout.addWidget(prev_week_button)
+        date_range_layout.addWidget(next_week_button)
         layout.addLayout(date_range_layout)
         
         # Table for weekly data input
@@ -263,6 +264,9 @@ class DataScreen(QWidget):
         self.data_table.setHorizontalHeaderLabels(["Question", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         self.populate_table()
         layout.addWidget(self.data_table)
+
+        # Connect cellChanged to handle real-time updates
+        self.data_table.cellChanged.connect(self.handle_table_edit)
         
         # Chart for quantitative data
         self.chart = QChart()
@@ -270,23 +274,78 @@ class DataScreen(QWidget):
         layout.addWidget(self.chart_view)
         
         # Buttons
-        button_layout = QHBoxLayout()
-        
-        save_button = QPushButton("Save")
-        save_button.clicked.connect(self.save_data)
-        button_layout.addWidget(save_button)
-        
         export_button = QPushButton("Export to Excel")
         export_button.clicked.connect(self.export_to_excel)
-        button_layout.addWidget(export_button)
+        layout.addWidget(export_button)
         
-        layout.addLayout(button_layout)
         self.setLayout(layout)
         self.update_chart()
+
+    def get_week_start_date(self, current_date):
+        """Get the Monday of the current week based on the given date."""
+        # Determine the day of the week (1 = Monday, 7 = Sunday)
+        day_of_week = current_date.dayOfWeek()
+        if day_of_week == 7:  # Adjust for Sunday being the last day of the week
+            day_of_week = 0
+        # Subtract days to get to Monday
+        return current_date.addDays(-(day_of_week - 1))
+
+    def handle_table_edit(self, row, column):
+        """Handle edits to the data table and update the chart."""
+        if column == 0:
+            return  # Ignore edits to the "Question" column
+
+        self.is_data_changed = True  # Mark as changed
+        try:
+            week_key = f"{self.start_date.toString('yyyy-MM-dd')}_to_{self.end_date.toString('yyyy-MM-dd')}"
+            question = self.data_table.item(row, 0).text()
+            day = DAYS_OF_WEEK[column - 1]
+            value = self.data_table.item(row, column).text()
+            
+            # Update the patient data in memory
+            week_data = self.patient_data.get(week_key, {})
+            question_data = week_data.get(question, {})
+            question_data[day] = value
+            week_data[question] = question_data
+            self.patient_data[week_key] = week_data
+
+            # Autosave
+            self.save_patient_data()  # Autosave changes
+
+            # Update the chart dynamically
+            self.update_chart()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to update data: {e}")
+
+    def go_to_previous_week(self):
+        """Navigate to the previous week's data."""
+        self.start_date = self.start_date.addDays(-7)
+        self.end_date = self.end_date.addDays(-7)
+        self.update_date_labels()
+        self.populate_table()
+        self.update_chart()
+
+    def go_to_next_week(self):
+        """Navigate to the next week's data."""
+        self.start_date = self.start_date.addDays(7)
+        self.end_date = self.end_date.addDays(7)
+        self.update_date_labels()
+        self.populate_table()
+        self.update_chart()
+
+    def update_date_labels(self):
+        """Update the displayed date range labels."""
+        self.start_date_label.setText(self.start_date.toString("yyyy-MM-dd"))
+        self.end_date_label.setText(self.end_date.toString("yyyy-MM-dd"))
     
     def populate_table(self):
         """Populate the data table with weekly inputs."""
+        self.data_table.blockSignals(True)  # Prevent triggering cellChanged while populating
         self.data_table.setRowCount(0)
+        week_key = f"{self.start_date.toString('yyyy-MM-dd')}_to_{self.end_date.toString('yyyy-MM-dd')}"
+
+        # Get data for the selected week
+        week_data = self.patient_data.get(week_key, {})
         for i, question in enumerate(self.questions):
             self.data_table.insertRow(i)
             
@@ -296,57 +355,38 @@ class DataScreen(QWidget):
             self.data_table.setItem(i, 0, question_item)
             
             # Weekly data inputs (editable)
-            for j, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], start=1):
-                value = self.patient_data.get(question["text"], {}).get(day, "")
+            for j, day in enumerate(DAYS_OF_WEEK, start=1):
+                value = week_data.get(question["text"], {}).get(day, "")
                 day_item = QTableWidgetItem(str(value))
                 self.data_table.setItem(i, j, day_item)
-    
-    def save_data(self):
-        """Save weekly data and date range for the patient."""
-        try:
-            # Save weekly data
-            for row in range(self.data_table.rowCount()):
-                question = self.data_table.item(row, 0).text()
-                self.patient_data[question] = {}
-                for col, day in enumerate(DAYS_OF_WEEK, start=1):
-                    item = self.data_table.item(row, col)
-                    value = item.text() if item else ""
-                    self.patient_data[question][day] = value
-            
-            # Save date range
-            self.patient_data["start_date"] = self.start_date.date().toString("yyyy-MM-dd")
-            self.patient_data["end_date"] = self.end_date.date().toString("yyyy-MM-dd")
-
-            self.save_patient_data()
-            QMessageBox.information(self, "Saved", "Patient data and date range have been updated.")
-            self.update_chart()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save data: {str(e)}")
+        
+        self.data_table.blockSignals(False)  # Re-enable cellChanged
     
     def update_chart(self):
-        """Update the line chart with quantitative data."""
+        """Update the line chart with quantitative data for the current week."""
         self.chart.removeAllSeries()
-        
+        week_key = f"{self.start_date.toString('yyyy-MM-dd')}_to_{self.end_date.toString('yyyy-MM-dd')}"
+        week_data = self.patient_data.get(week_key, {})
+
         for question in self.questions:
             if question["type"] == "Quantitative":
-                # Create a series for the question
                 series = QLineSeries()
                 series.setName(question["text"])
                 
                 # Add data points for Monday to Friday
-                weekly_data = self.patient_data.get(question["text"], {})
-                for i, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]):
+                question_data = week_data.get(question["text"], {})
+                for i, day in enumerate(DAYS_OF_WEEK):
                     try:
-                        value = float(weekly_data.get(day, 0) or 0)
+                        value = float(question_data.get(day, 0) or 0)
                     except ValueError:
-                        value = 0  # Handle non-numeric values gracefully
+                        value = 0
                     series.append(i, value)
                 
                 self.chart.addSeries(series)
         
         # Configure the chart
         self.chart.createDefaultAxes()
-        self.chart.setTitle("Quantitative Data (Weekly)")
+        self.chart.setTitle(f"Quantitative Data ({self.start_date.toString('yyyy-MM-dd')} to {self.end_date.toString('yyyy-MM-dd')})")
         self.chart.legend().setVisible(True)
     
     def load_patient_data(self):
@@ -356,37 +396,27 @@ class DataScreen(QWidget):
             if os.path.exists(path):
                 with open(path, "r") as file:
                     all_data = json.load(file)
-                    return all_data.get(str(self.patient["id"]), {})  # Load only this patient's data
+                    return all_data.get(self.patient_uuid, {})  # Load only this patient's data
             else:
                 return {}
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load patient data: {str(e)}")
-            print(f"Error loading patient data: {e}")  # Debugging information
+            QMessageBox.critical(self, "Error", f"Failed to load patient data: {e}")
             return {}
 
-    
     def save_patient_data(self):
         """Save the patient's data to a persistent file."""
         try:
             path = get_resource_path("patient_data.json")
             all_data = {}
-            
-            # Load existing data if file exists
             if os.path.exists(path):
                 with open(path, "r") as file:
                     all_data = json.load(file)
-            
-            # Update this patient's data
-            all_data[str(self.patient["id"])] = self.patient_data
-            
-            # Write back to file
+            all_data[self.patient_uuid] = self.patient_data
             with open(path, "w") as file:
                 json.dump(all_data, file, indent=4)
-            print(f"Saved patient data for ID {self.patient['id']} to {path}")  # Debugging information
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save patient data: {str(e)}")
-            print(f"Error saving patient data: {e}")  # Debugging information
-    
+            QMessageBox.critical(self, "Error", f"Failed to save patient data: {e}")
+            
     def export_to_excel(self):
         """Export patient data to an Excel file with date range in the file name."""
         try:
