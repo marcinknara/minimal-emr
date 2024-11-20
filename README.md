@@ -50,6 +50,9 @@ Run the application:
 python emr_app.py
 ```
 
+## Build
+pyinstaller --onefile --noconsole --hidden-import=Pillow --hidden-import=PyQt5.QtChart emr_app.py
+
 ## License
 
 This project is licensed under the MIT License.

@@ -5,9 +5,9 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout, QCheckBox
 )
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDate
 import os
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QDateEdit, QLabel
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
@@ -229,12 +229,33 @@ class DataScreen(QWidget):
         
         self.patient = patient  # Patient's reference
         self.questions = questions  # Questions list
-        
+
         # Load existing patient data
         self.patient_data = self.load_patient_data()
         
         # Main layout
         layout = QVBoxLayout()
+
+        # Date Range Input
+        date_range_layout = QHBoxLayout()
+        self.start_date = QDateEdit(calendarPopup=True)
+        self.end_date = QDateEdit(calendarPopup=True)
+
+        # Set default dates
+        today = QDate.currentDate()
+        self.start_date.setDate(today)
+        self.end_date.setDate(today.addDays(6))
+
+        # Load saved dates if available
+        if "start_date" in self.patient_data and "end_date" in self.patient_data:
+            self.start_date.setDate(QDate.fromString(self.patient_data["start_date"], "yyyy-MM-dd"))
+            self.end_date.setDate(QDate.fromString(self.patient_data["end_date"], "yyyy-MM-dd"))
+
+        date_range_layout.addWidget(QLabel("Start Date:"))
+        date_range_layout.addWidget(self.start_date)
+        date_range_layout.addWidget(QLabel("End Date:"))
+        date_range_layout.addWidget(self.end_date)
+        layout.addLayout(date_range_layout)
         
         # Table for weekly data input
         self.data_table = QTableWidget()
@@ -260,10 +281,7 @@ class DataScreen(QWidget):
         button_layout.addWidget(export_button)
         
         layout.addLayout(button_layout)
-        
         self.setLayout(layout)
-        
-        # Update the chart initially
         self.update_chart()
     
     def populate_table(self):
@@ -284,8 +302,9 @@ class DataScreen(QWidget):
                 self.data_table.setItem(i, j, day_item)
     
     def save_data(self):
-        """Save weekly data for the patient."""
+        """Save weekly data and date range for the patient."""
         try:
+            # Save weekly data
             for row in range(self.data_table.rowCount()):
                 question = self.data_table.item(row, 0).text()
                 self.patient_data[question] = {}
@@ -293,19 +312,16 @@ class DataScreen(QWidget):
                     item = self.data_table.item(row, col)
                     value = item.text() if item else ""
                     self.patient_data[question][day] = value
+            
+            # Save date range
+            self.patient_data["start_date"] = self.start_date.date().toString("yyyy-MM-dd")
+            self.patient_data["end_date"] = self.end_date.date().toString("yyyy-MM-dd")
+
             self.save_patient_data()
-            QMessageBox.information(self, "Saved", "Patient data has been updated.")
+            QMessageBox.information(self, "Saved", "Patient data and date range have been updated.")
             self.update_chart()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save data: {str(e)}")
-            print(f"Error in save_data: {e}")  # Debugging information
-        
-        # Save the data to the file
-        self.save_patient_data()
-        QMessageBox.information(self, "Saved", "Patient data has been updated.")
-        
-        # Update the chart with new data
-        self.update_chart()
     
     def update_chart(self):
         """Update the line chart with quantitative data."""
@@ -372,10 +388,13 @@ class DataScreen(QWidget):
             print(f"Error saving patient data: {e}")  # Debugging information
     
     def export_to_excel(self):
+        """Export patient data to an Excel file with date range in the file name."""
         try:
-            # Ask for a save location for the Excel file
+            start_date_str = self.patient_data.get("start_date", "start")
+            end_date_str = self.patient_data.get("end_date", "end")
+            file_name = f"{self.patient['name']}_{start_date_str}_to_{end_date_str}_data.xlsx"
             save_path, _ = QFileDialog.getSaveFileName(
-                self, "Save File", f"{self.patient['name']}_data.xlsx", "Excel Files (*.xlsx)"
+                self, "Save File", file_name, "Excel Files (*.xlsx)"
             )
             if not save_path:
                 return
@@ -391,12 +410,15 @@ class DataScreen(QWidget):
 
             ws.append(["Patient Name:", self.patient["name"]])
             ws.append(["Patient Age:", self.patient["age"]])
+            ws.append(["Date Range:", f"{start_date_str} to {end_date_str}"])
             ws.append([])
 
             # Add headers
             ws.append(["Question"] + DAYS_OF_WEEK)
 
             for question, weekly_data in self.patient_data.items():
+                if question in ["start_date", "end_date"]:  # Skip date metadata
+                    continue
                 row = [question]
                 for day in DAYS_OF_WEEK:
                     row.append(weekly_data.get(day, ""))
@@ -420,7 +442,6 @@ class DataScreen(QWidget):
             # Clean up temporary files
             if os.path.exists(chart_image_path):
                 os.remove(chart_image_path)
-
 
 class EditDataScreen(QWidget):
     def __init__(self, questions, save_questions_callback):
