@@ -66,7 +66,7 @@ class EMRManager(QMainWindow):
 
     def load_patients(self):
         try:
-            path = get_standard_path("patients.json")
+            path = get_user_data_path("patients.json")
             print(f"Loading patients from: {path}")  # Debugging information
             if not os.path.exists(path):
                 with open(path, "w") as file:
@@ -80,7 +80,7 @@ class EMRManager(QMainWindow):
     
     def save_patients(self):
         try:
-            with open(get_standard_path("patients.json"), "w") as file:
+            with open(get_user_data_path("patients.json"), "w") as file:
                 json.dump(self.patients, file, indent=4)
         except IOError as e:
             QMessageBox.critical(self, "Error", f"Failed to save patients: {str(e)}")
@@ -145,7 +145,7 @@ class EMRManager(QMainWindow):
         self.save_questions()  # Save the questions to the JSON file
 
     def save_questions(self):
-        with open(get_standard_path("questions.json"), "w") as file:
+        with open(get_user_data_path("questions.json"), "w") as file:
             json.dump(self.questions, file, indent=4)
     
     def delete_patient(self):
@@ -173,7 +173,7 @@ class EMRManager(QMainWindow):
     
     
     def load_questions(self):
-        path = get_standard_path("questions.json")
+        path = get_user_data_path("questions.json")
         if not os.path.exists(path):
             default_questions = [
                 {"text": "Question 1", "type": "Quantitative"},
@@ -376,7 +376,7 @@ class DataScreen(QWidget):
     def load_patient_data(self):
         """Load existing patient data for the specific patient."""
         try:
-            path = get_standard_path("patient_data.json")
+            path = get_user_data_path("patient_data.json")
             if os.path.exists(path):
                 with open(path, "r") as file:
                     all_data = json.load(file)
@@ -390,7 +390,7 @@ class DataScreen(QWidget):
     def save_patient_data(self):
         """Save the patient's data to a persistent file."""
         try:
-            path = get_standard_path("patient_data.json")
+            path = get_user_data_path("patient_data.json")
             all_data = {}
             if os.path.exists(path):
                 with open(path, "r") as file:
@@ -554,22 +554,19 @@ class EditDataScreen(QWidget):
 
 import platform
 
-def get_standard_path(filename):
-    """
-    Get a standardized path for saving resource files based on the operating system.
-    """
-    app_name = "CaseManager"
+def get_user_data_path(filename):
+    """Get the absolute path to store user-specific resource files."""
+    if platform.system() == "Windows":
+        base_path = os.getenv("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
+    elif platform.system() == "Darwin":  # macOS
+        base_path = os.path.expanduser("~/Library/Application Support")
+    else:  # Linux or other
+        base_path = os.path.expanduser("~/.config")
 
-    if platform.system() == "Darwin":  # macOS
-        base_path = os.path.expanduser(f"~/Library/Application Support/{app_name}")
-    elif platform.system() == "Windows":  # Windows
-        base_path = os.path.join(os.getenv("APPDATA"), app_name)
-    else:  # Linux or others
-        base_path = os.path.expanduser(f"~/.{app_name}")
+    app_folder = os.path.join(base_path, "CaseManager")
+    os.makedirs(app_folder, exist_ok=True)
 
-    os.makedirs(base_path, exist_ok=True)
-    print(f"Resource path for '{filename}': {base_path}")  # Debug output
-    return os.path.join(base_path, filename)
+    return os.path.join(app_folder, filename)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
