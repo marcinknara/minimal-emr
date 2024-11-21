@@ -12,11 +12,12 @@ from PyQt5.QtWidgets import QFileDialog, QLabel
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
-
+import logging
 from update_manager import UpdateManager
+import platform
+import subprocess
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-
 
 def get_version_file_path():
     """Return the path to the version.json file."""
@@ -25,7 +26,7 @@ def get_version_file_path():
 def load_local_version():
     """Load the local version from the version.json file."""
     version_file = get_version_file_path()
-    print(f"Loading version from {version_file}")  # Debugging log
+    logging.info(f"Loading version from {version_file}")  # Debugging log
     if os.path.exists(version_file):
         try:
             with open(version_file, "r") as file:
@@ -38,9 +39,31 @@ def load_local_version():
 def save_local_version(version):
     """Save the current version to the version.json file."""
     version_file = get_version_file_path()
-    print(f"Saving version {version} to {version_file}")  # Debugging log
+    logging.info(f"Saving version {version} to {version_file}")  # Debugging log
     with open(version_file, "w") as file:
         json.dump({"version": version}, file)
+
+def get_user_data_path(filename):
+    """Get the absolute path to store user-specific resource files."""
+    if platform.system() == "Windows":
+        base_path = os.getenv("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
+    elif platform.system() == "Darwin":  # macOS
+        base_path = os.path.expanduser("~/Library/Application Support")
+    else:  # Linux or other
+        base_path = os.path.expanduser("~/.config")
+
+    app_folder = os.path.join(base_path, "CaseManager")
+    os.makedirs(app_folder, exist_ok=True)
+
+    return os.path.join(app_folder, filename)
+
+log_file = os.path.join(get_user_data_path("app.log"))
+logging.basicConfig(
+    filename=log_file,
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logging.info("Application started.")
 
 class EMRManager(QMainWindow):
     def __init__(self):
@@ -92,11 +115,11 @@ class EMRManager(QMainWindow):
     def load_patients(self):
         try:
             path = get_user_data_path("patients.json")
-            print(f"Loading patients from: {path}")  # Debugging information
+            logging.info(f"Loading patients from: {path}")  # Debugging information
             if not os.path.exists(path):
                 with open(path, "w") as file:
                     json.dump({}, file, indent=4)
-                    print("Created new patients.json file.")  # Debugging information
+                    logging.info("Created new patients.json file.")  # Debugging information
             with open(path, "r") as file:
                 return json.load(file)
         except (FileNotFoundError, json.JSONDecodeError) as e:
@@ -577,31 +600,15 @@ class EditDataScreen(QWidget):
         QMessageBox.information(self, "Saved", "Data points have been updated successfully.")
         self.close()
 
-import platform
-
-def get_user_data_path(filename):
-    """Get the absolute path to store user-specific resource files."""
-    if platform.system() == "Windows":
-        base_path = os.getenv("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
-    elif platform.system() == "Darwin":  # macOS
-        base_path = os.path.expanduser("~/Library/Application Support")
-    else:  # Linux or other
-        base_path = os.path.expanduser("~/.config")
-
-    app_folder = os.path.join(base_path, "CaseManager")
-    os.makedirs(app_folder, exist_ok=True)
-
-    return os.path.join(app_folder, filename)
-
 def restart_app():
     """Restart the application using the updated executable."""
     try:
         # Relaunch the app
-        print(f"Restarting app with executable: {sys.executable}")
+        logging.info(f"Restarting app with executable: {sys.executable}")
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
     except Exception as e:
-        print(f"Failed to restart app: {e}")
+        logging.error(f"Failed to restart app: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)    
@@ -629,7 +636,7 @@ if __name__ == "__main__":
                 app_dir = os.path.dirname(sys.executable)  # Use directory of the running executable
                 if updater.apply_update(app_dir, output_dir):
                     save_local_version(latest_version)
-                    print(f"Update applied successfully. Saving new version: {latest_version}")
+                    logging.info(f"Update applied successfully. Saving new version: {latest_version}")
                     QMessageBox.information(None, "Update Complete", "Restarting the app now.")
                     restart_app()
                 else:
