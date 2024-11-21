@@ -43,7 +43,7 @@ def save_local_version(version):
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager")
+        self.setWindowTitle("Case Manager v1.0.4")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
