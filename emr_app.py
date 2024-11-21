@@ -592,9 +592,10 @@ def get_user_data_path(filename):
     return os.path.join(app_folder, filename)
 
 def restart_app():
-    """Restart the application."""
+    """Restart the application using the updated executable."""
     try:
         # Relaunch the app
+        print(f"Restarting app with executable: {sys.executable}")
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
     except Exception as e:
@@ -623,11 +624,16 @@ if __name__ == "__main__":
         if reply == QMessageBox.Yes:
             output_dir = tempfile.gettempdir()
             if updater.download_update(download_url, output_dir):
-                if updater.apply_update(os.getcwd(), output_dir):
+                app_dir = os.path.dirname(sys.executable)  # Use directory of the running executable
+                if updater.apply_update(app_dir, output_dir):
                     save_local_version(latest_version)
                     print(f"Update applied successfully. Saving new version: {latest_version}")
                     QMessageBox.information(None, "Update Complete", "Restarting the app now.")
                     restart_app()
+                else:
+                    QMessageBox.critical(None, "Update Failed", "Failed to apply the update.")
+            else:
+                QMessageBox.critical(None, "Download Failed", "Failed to download the update.")
     window = EMRManager()
     window.show()
     sys.exit(app.exec_())
