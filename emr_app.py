@@ -591,6 +591,15 @@ def get_user_data_path(filename):
 
     return os.path.join(app_folder, filename)
 
+def restart_app():
+    """Restart the application."""
+    try:
+        # Relaunch the app
+        subprocess.Popen([sys.executable] + sys.argv)
+        sys.exit(0)
+    except Exception as e:
+        print(f"Failed to restart app: {e}")
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)    
     # Current app version
@@ -616,7 +625,9 @@ if __name__ == "__main__":
             if updater.download_update(download_url, output_dir):
                 if updater.apply_update(os.getcwd(), output_dir):
                     save_local_version(latest_version)
-                    QMessageBox.information(None, "Update Complete", "Please restart the app to apply the update.")
+                    print(f"Update applied successfully. Saving new version: {latest_version}")
+                    QMessageBox.information(None, "Update Complete", "Restarting the app now.")
+                    restart_app()
     window = EMRManager()
     window.show()
     sys.exit(app.exec_())

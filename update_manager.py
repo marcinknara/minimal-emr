@@ -55,6 +55,7 @@ class UpdateManager:
             for item in os.listdir(update_dir):
                 s = os.path.join(update_dir, item)
                 d = os.path.join(app_dir, item)
+                print(f"Updating: {s} -> {d}")  # Debugging log
                 if os.path.isdir(s):
                     if os.path.exists(d):
                         shutil.rmtree(d)
@@ -62,6 +63,8 @@ class UpdateManager:
                 else:
                     shutil.copy2(s, d)
             print("Update applied successfully.")
+            print(f"App directory: {os.getcwd()}")
+            print(f"Update directory: {update_dir}")
             return True
         except Exception as e:
             print(f"Failed to apply update: {e}")
