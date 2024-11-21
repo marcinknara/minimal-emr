@@ -13,6 +13,8 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
 
+from update_manager import UpdateManager
+
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 class EMRManager(QMainWindow):
@@ -27,8 +29,8 @@ class EMRManager(QMainWindow):
         
         # Table to display patients
         self.patient_table = QTableWidget()
-        self.patient_table.setColumnCount(4)
-        self.patient_table.setHorizontalHeaderLabels(["ID", "Name", "Age", "Data"])
+        self.patient_table.setColumnCount(3)
+        self.patient_table.setHorizontalHeaderLabels(["Name", "Age", "Data"])
         self.main_layout.addWidget(self.patient_table)
         
         # Connect cellChanged signal to handle table edits
@@ -64,7 +66,7 @@ class EMRManager(QMainWindow):
 
     def load_patients(self):
         try:
-            path = get_resource_path("patients.json")
+            path = get_standard_path("patients.json")
             print(f"Loading patients from: {path}")  # Debugging information
             if not os.path.exists(path):
                 with open(path, "w") as file:
@@ -78,7 +80,7 @@ class EMRManager(QMainWindow):
     
     def save_patients(self):
         try:
-            with open(get_resource_path("patients.json"), "w") as file:
+            with open(get_standard_path("patients.json"), "w") as file:
                 json.dump(self.patients, file, indent=4)
         except IOError as e:
             QMessageBox.critical(self, "Error", f"Failed to save patients: {str(e)}")
@@ -143,7 +145,7 @@ class EMRManager(QMainWindow):
         self.save_questions()  # Save the questions to the JSON file
 
     def save_questions(self):
-        with open(get_resource_path("questions.json"), "w") as file:
+        with open(get_standard_path("questions.json"), "w") as file:
             json.dump(self.questions, file, indent=4)
     
     def delete_patient(self):
@@ -171,7 +173,7 @@ class EMRManager(QMainWindow):
     
     
     def load_questions(self):
-        path = get_resource_path("questions.json")
+        path = get_standard_path("questions.json")
         if not os.path.exists(path):
             default_questions = [
                 {"text": "Question 1", "type": "Quantitative"},
@@ -197,24 +199,6 @@ class EMRManager(QMainWindow):
             self.save_questions_from_settings  # Pass the method as a callback
         )
         self.edit_data_window.show()
-
-    # def export_data(self):
-    #     """Export patient data to a file."""
-    #     print("Export patient data to CSV/Excel/PDF")
-
-def get_resource_path(filename):
-    """Get the absolute path to the resource file in the resources folder."""
-    if getattr(sys, 'frozen', False):  # Running as a PyInstaller bundle
-        base_path = os.path.dirname(sys.executable)  # Directory of the executable
-    else:
-        base_path = os.path.abspath(".")  # Current working directory for development
-
-    # Ensure the resources directory exists
-    resources_path = os.path.join(base_path, "resources")
-    os.makedirs(resources_path, exist_ok=True)
-
-    # Return the path to the specific file inside the resources folder
-    return os.path.join(resources_path, filename)
 
 class DataScreen(QWidget):
     def __init__(self, patient_uuid, questions, patients):
@@ -392,7 +376,7 @@ class DataScreen(QWidget):
     def load_patient_data(self):
         """Load existing patient data for the specific patient."""
         try:
-            path = get_resource_path("patient_data.json")
+            path = get_standard_path("patient_data.json")
             if os.path.exists(path):
                 with open(path, "r") as file:
                     all_data = json.load(file)
@@ -406,7 +390,7 @@ class DataScreen(QWidget):
     def save_patient_data(self):
         """Save the patient's data to a persistent file."""
         try:
-            path = get_resource_path("patient_data.json")
+            path = get_standard_path("patient_data.json")
             all_data = {}
             if os.path.exists(path):
                 with open(path, "r") as file:
@@ -568,9 +552,52 @@ class EditDataScreen(QWidget):
         QMessageBox.information(self, "Saved", "Data points have been updated successfully.")
         self.close()
 
+import platform
+
+def get_standard_path(filename):
+    """
+    Get a standardized path for saving resource files based on the operating system.
+    """
+    app_name = "CaseManager"
+
+    if platform.system() == "Darwin":  # macOS
+        base_path = os.path.expanduser(f"~/Library/Application Support/{app_name}")
+    elif platform.system() == "Windows":  # Windows
+        base_path = os.path.join(os.getenv("APPDATA"), app_name)
+    else:  # Linux or others
+        base_path = os.path.expanduser(f"~/.{app_name}")
+
+    os.makedirs(base_path, exist_ok=True)
+    print(f"Resource path for '{filename}': {base_path}")  # Debug output
+    return os.path.join(base_path, filename)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = EMRManager()
+    
+    # Current app version
+    CURRENT_VERSION = "1.0.0"
+    
+    # GitHub repo info
+    REPO_OWNER = "marcinknara"
+    REPO_NAME = "minimal-emr"
+
+    # Check for updates
+    updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
+    latest_version, download_url = updater.check_for_updates()
+    if latest_version:
+        # Prompt user to update
+        reply = QMessageBox.question(
+            None,
+            "Update Available",
+            f"A new version ({latest_version}) is available. Do you want to download it now?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            output_dir = tempfile.gettempdir()
+            if updater.download_update(download_url, output_dir):
+                if updater.apply_update(os.getcwd(), output_dir):
+                    QMessageBox.information(None, "Update Complete", "Please restart the app to apply the update.")
+    
     window.show()
     sys.exit(app.exec_())
