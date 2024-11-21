@@ -51,21 +51,31 @@ class UpdateManager:
 
     def apply_update(self, app_dir, update_dir):
         try:
-            # Replace old files with new files
             for item in os.listdir(update_dir):
                 s = os.path.join(update_dir, item)
                 d = os.path.join(app_dir, item)
-                print(f"Updating: {s} -> {d}")  # Debugging log
+
+                # Ignore non-regular files and sockets
+                if os.path.islink(s) or os.path.splitext(item)[1] in ['.sock', '.tmp']:
+                    print(f"Skipping non-regular file or socket: {s}")
+                    continue
+
+                print(f"Attempting to update: {s} -> {d}")
                 if os.path.isdir(s):
                     if os.path.exists(d):
+                        print(f"Removing directory: {d}")
                         shutil.rmtree(d)
+                    print(f"Copying directory: {s} -> {d}")
                     shutil.copytree(s, d)
                 else:
+                    if os.path.exists(d):
+                        print(f"Overwriting file: {d}")
+                        os.remove(d)
+                    print(f"Copying file: {s} -> {d}")
                     shutil.copy2(s, d)
+
             print("Update applied successfully.")
-            print(f"App directory: {os.getcwd()}")
-            print(f"Update directory: {update_dir}")
             return True
         except Exception as e:
-            print(f"Failed to apply update: {e}")
+            print(f"Failed to apply update due to: {e}")
             return False

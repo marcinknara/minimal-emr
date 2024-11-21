@@ -25,6 +25,7 @@ def get_version_file_path():
 def load_local_version():
     """Load the local version from the version.json file."""
     version_file = get_version_file_path()
+    print(f"Loading version from {version_file}")  # Debugging log
     if os.path.exists(version_file):
         try:
             with open(version_file, "r") as file:
@@ -37,6 +38,7 @@ def load_local_version():
 def save_local_version(version):
     """Save the current version to the version.json file."""
     version_file = get_version_file_path()
+    print(f"Saving version {version} to {version_file}")  # Debugging log
     with open(version_file, "w") as file:
         json.dump({"version": version}, file)
 
