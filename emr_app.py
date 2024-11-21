@@ -76,7 +76,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.7")
+        self.setWindowTitle("Case Manager v1.0.8")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
@@ -609,48 +609,53 @@ class EditDataScreen(QWidget):
         self.close()
 
 def restart_app():
-    """Restart the application using the updated executable."""
+    """Restart the application."""
     try:
-        # Relaunch the app
-        logging.info(f"Restarting app with executable: {sys.executable}")
+        logging.info("Restarting application...")
         subprocess.Popen([sys.executable] + sys.argv)
         sys.exit(0)
     except Exception as e:
-        logging.error(f"Failed to restart app: {e}")
+        logging.error("Failed to restart application: %s", str(e))
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)    
-    # Current app version
-    CURRENT_VERSION = load_local_version()
-    
-    # GitHub repo info
-    REPO_OWNER = "marcinknara"
-    REPO_NAME = "minimal-emr"
-
-    # Check for updates
-    updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
-    latest_version, download_url = updater.check_for_updates()
-    if latest_version:
-        # Prompt user to update
-        reply = QMessageBox.question(
-            None,
-            "Update Available",
-            f"A new version ({latest_version}) is available. Do you want to download it now?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            output_dir = tempfile.gettempdir()
-            if updater.download_update(download_url, output_dir):
-                app_dir = os.path.dirname(sys.executable)  # Use directory of the running executable
-                if updater.apply_update(app_dir, output_dir):
-                    save_local_version(latest_version)
-                    logging.info(f"Update applied successfully. Saving new version: {latest_version}")
-                    QMessageBox.information(None, "Update Complete", "Restarting the app now.")
-                    restart_app()
-                else:
-                    QMessageBox.critical(None, "Update Failed", "Failed to apply the update.")
-            else:
-                QMessageBox.critical(None, "Download Failed", "Failed to download the update.")
-    window = EMRManager()
-    window.show()
-    sys.exit(app.exec_())
+    try:
+        logging.info("Application started.")
+        app = QApplication(sys.argv)
+        
+        # Current app version
+        CURRENT_VERSION = load_local_version()
+        logging.info("Current version: %s", CURRENT_VERSION)
+        
+        # GitHub repo info
+        REPO_OWNER = "marcinknara"
+        REPO_NAME = "minimal-emr"
+        
+        # Check for updates
+        updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
+        latest_version, download_url = updater.check_for_updates()
+        if latest_version:
+            logging.info("New version available: %s", latest_version)
+            reply = QMessageBox.question(
+                None,
+                "Update Available",
+                f"A new version ({latest_version}) is available. Do you want to download it now?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                output_dir = tempfile.gettempdir()
+                if updater.download_update(download_url, output_dir):
+                    if updater.apply_update(os.getcwd(), output_dir):
+                        save_local_version(latest_version)
+                        logging.info("Update applied successfully. Restarting now...")
+                        restart_app()
+                    else:
+                        logging.error("Failed to apply the update.")
+                        QMessageBox.critical(None, "Update Failed", "The update could not be applied.")
+        else:
+            logging.info("No updates available.")
+        
+        window = EMRManager()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception as e:
+        logging.error("Application error: %s", str(e))

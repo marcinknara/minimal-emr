@@ -2,6 +2,9 @@ import requests
 import os
 import zipfile
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 class UpdateManager:
     def __init__(self, current_version, repo_owner, repo_name):
@@ -50,32 +53,27 @@ class UpdateManager:
             return False
 
     def apply_update(self, app_dir, update_dir):
+        """Apply the downloaded update."""
         try:
+            logger.info("Applying update from: %s", update_dir)
             for item in os.listdir(update_dir):
-                s = os.path.join(update_dir, item)
-                d = os.path.join(app_dir, item)
+                source_path = os.path.join(update_dir, item)
+                dest_path = os.path.join(app_dir, item)
 
-                # Ignore non-regular files and sockets
-                if os.path.islink(s) or os.path.splitext(item)[1] in ['.sock', '.tmp']:
-                    print(f"Skipping non-regular file or socket: {s}")
-                    continue
-
-                print(f"Attempting to update: {s} -> {d}")
-                if os.path.isdir(s):
-                    if os.path.exists(d):
-                        print(f"Removing directory: {d}")
-                        shutil.rmtree(d)
-                    print(f"Copying directory: {s} -> {d}")
-                    shutil.copytree(s, d)
+                if os.path.isdir(source_path):
+                    logger.info("Updating directory: %s -> %s", source_path, dest_path)
+                    if os.path.exists(dest_path):
+                        logger.info("Removing existing directory: %s", dest_path)
+                        shutil.rmtree(dest_path)
+                    shutil.copytree(source_path, dest_path)
+                elif os.path.isfile(source_path):
+                    logger.info("Updating file: %s -> %s", source_path, dest_path)
+                    shutil.copy2(source_path, dest_path)
                 else:
-                    if os.path.exists(d):
-                        print(f"Overwriting file: {d}")
-                        os.remove(d)
-                    print(f"Copying file: {s} -> {d}")
-                    shutil.copy2(s, d)
+                    logger.warning("Skipping non-regular file: %s", source_path)
 
-            print("Update applied successfully.")
+            logger.info("Update applied successfully.")
             return True
         except Exception as e:
-            print(f"Failed to apply update due to: {e}")
+            logger.error("Failed to apply update: %s", str(e))
             return False
