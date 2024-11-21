@@ -17,6 +17,29 @@ from update_manager import UpdateManager
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
+
+def get_version_file_path():
+    """Return the path to the version.json file."""
+    return get_user_data_path("version.json")
+
+def load_local_version():
+    """Load the local version from the version.json file."""
+    version_file = get_version_file_path()
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r") as file:
+                data = json.load(file)
+                return data.get("version", "0.0.0")
+        except json.JSONDecodeError:
+            return "0.0.0"
+    return "0.0.0"
+
+def save_local_version(version):
+    """Save the current version to the version.json file."""
+    version_file = get_version_file_path()
+    with open(version_file, "w") as file:
+        json.dump({"version": version}, file)
+
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -569,11 +592,9 @@ def get_user_data_path(filename):
     return os.path.join(app_folder, filename)
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = EMRManager()
-    
+    app = QApplication(sys.argv)    
     # Current app version
-    CURRENT_VERSION = "1.0.0"
+    CURRENT_VERSION = load_local_version()
     
     # GitHub repo info
     REPO_OWNER = "marcinknara"
@@ -594,7 +615,8 @@ if __name__ == "__main__":
             output_dir = tempfile.gettempdir()
             if updater.download_update(download_url, output_dir):
                 if updater.apply_update(os.getcwd(), output_dir):
+                    save_local_version(latest_version)
                     QMessageBox.information(None, "Update Complete", "Please restart the app to apply the update.")
-    
+    window = EMRManager()
     window.show()
     sys.exit(app.exec_())
