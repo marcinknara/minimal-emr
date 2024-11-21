@@ -57,18 +57,26 @@ def get_user_data_path(filename):
 
     return os.path.join(app_folder, filename)
 
-log_file = os.path.join(get_user_data_path("app.log"))
-logging.basicConfig(
-    filename=log_file,
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-logging.info("Application started.")
+
+def setup_logging():
+    log_dir = get_user_data_path("")  # Get the CaseManager directory
+    log_file = os.path.join(log_dir, "app.log")
+    
+    # Configure logging
+    logging.basicConfig(
+        filename=log_file,
+        filemode="a",  # Append to the log file
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        level=logging.DEBUG,
+    )
+    logging.debug("Logging setup complete.")
+
+setup_logging()
 
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.4")
+        self.setWindowTitle("Case Manager v1.0.7")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
