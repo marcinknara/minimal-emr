@@ -7,6 +7,8 @@ import re
 import platform
 from packaging.version import Version, InvalidVersion
 import sys
+import psutil  # To check and terminate running processes
+import time
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -23,6 +25,7 @@ def setup_logging():
     logging.debug("UpdateManager logging setup complete.")
 
 setup_logging()
+
 
 class UpdateManager:
     def __init__(self, current_version, repo_owner, repo_name):
@@ -100,26 +103,44 @@ class UpdateManager:
         except Exception as e:
             logging.error(f"Failed to download update: {e}")
             return None
+        
+    def wait_for_application_exit(app_name):
+        """Wait for the application process to terminate."""
+        logging.info(f"Waiting for {app_name} to exit...")
+        while True:
+            running = False
+            for process in psutil.process_iter(['name']):
+                if process.info['name'] == app_name:
+                    running = True
+                    break
+            if not running:
+                break
+            time.sleep(1)  # Check every second
+        logging.info(f"{app_name} has exited.") 
 
     def apply_update(self, app_dir=None, update_dir=None):
-        """Apply the downloaded update."""
+        """Apply the downloaded update and restart the application."""
         try:
             if not app_dir:
-                app_dir = os.path.dirname(sys.argv[0])  # Assume app is in the same directory as the script
+                app_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
             if not update_dir:
                 update_dir = self.get_update_directory()
-            
+
+            logging.info("Waiting for application to exit before applying update...")
+            self.terminate_running_instance()  # Ensure the main app is terminated
+            wait_for_application_exit("CaseManager")  # Replace with the exact app name if needed
+
             logging.info("Applying update from: %s", update_dir)
             extracted_update_dir = os.path.join(update_dir, "update_package")
             if not os.path.exists(extracted_update_dir):
                 logging.error("Update package directory not found: %s", extracted_update_dir)
                 return False
-            
+
+            # Apply the update
             for item in os.listdir(extracted_update_dir):
                 source_path = os.path.join(extracted_update_dir, item)
                 dest_path = os.path.join(app_dir, item)
 
-                # Process only valid files or directories from the package
                 if os.path.isdir(source_path):
                     logging.info("Updating directory: %s -> %s", source_path, dest_path)
                     if os.path.exists(dest_path):
@@ -132,7 +153,28 @@ class UpdateManager:
             # Clean up temporary update directory
             shutil.rmtree(update_dir, ignore_errors=True)
             logging.info("Update applied successfully.")
+
+            # Restart the application
+            self.restart_application()
             return True
         except Exception as e:
             logging.error("Failed to apply update: %s", str(e))
             return False
+
+    def terminate_running_instance(self):
+        """Terminate the running instance of the application."""
+        current_pid = os.getpid()
+        for process in psutil.process_iter(['pid', 'name']):
+            if process.info['name'] == "CaseManager" and process.info['pid'] != current_pid:
+                logging.info(f"Terminating running process: PID {process.info['pid']}")
+                process.terminate()
+                process.wait(timeout=5)
+
+    def restart_application(self):
+        """Restart the application."""
+        try:
+            logging.info("Restarting application...")
+            subprocess.Popen([sys.executable] + sys.argv)
+            sys.exit(0)
+        except Exception as e:
+            logging.error("Failed to restart application: %s", str(e))

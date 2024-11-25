@@ -79,7 +79,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.15")
+        self.setWindowTitle("Case Manager v1.0.16")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
@@ -144,7 +144,8 @@ class EMRManager(QMainWindow):
             latest_version, download_url = updater.check_for_updates()
         else:
             logging.info("Development mode: Skipping update check.")
-            
+            return
+
         if latest_version:
             logging.info(f"New version available: {latest_version}")
             reply = QMessageBox.question(
@@ -155,15 +156,24 @@ class EMRManager(QMainWindow):
             )
             if reply == QMessageBox.Yes:
                 output_dir = tempfile.gettempdir()
-                if updater.download_update(download_url, output_dir):
-                    if updater.apply_update(os.getcwd(), output_dir):
-                        save_local_version(latest_version)
-                        logging.info("Update applied successfully. Restarting now...")
-                        QMessageBox.information(self, "Update Successful", "The application will now restart.")
-                        restart_app()
-                    else:
-                        QMessageBox.critical(self, "Update Failed", "The update could not be applied.")
-                        logging.error("Failed to apply the update.")
+                extracted_dir = updater.download_update(download_url, output_dir)
+                if extracted_dir:
+                    # Launch the updater
+                    app_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+                    updater_path = os.path.join(app_dir, "update_manager.py")
+
+                    logging.info("Launching updater...")
+                    subprocess.Popen(
+                        [sys.executable, updater_path, app_dir, extracted_dir],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    logging.info("Exiting application for updater...")
+                    QMessageBox.information(self, "Updating", "The application will now close to apply the update.")
+                    sys.exit(0)  # Terminate the application
+                else:
+                    QMessageBox.critical(self, "Update Failed", "The update could not be downloaded.")
+                    logging.error("Failed to download the update.")
             else:
                 logging.info("User chose not to update.")
         else:
