@@ -79,7 +79,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.21")
+        self.setWindowTitle("Case Manager v1.0.22")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
