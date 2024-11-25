@@ -51,7 +51,7 @@ python emr_app.py
 ```
 
 ## Build
-pyinstaller --onefile --noconsole --hidden-import=Pillow --hidden-import=PyQt5.QtChart --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
+pyinstaller --onefile --noconsole --windowed --hidden-import=Pillow --hidden-import=PyQt5.QtChart --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
 
 ## License
 

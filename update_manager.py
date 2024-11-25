@@ -4,6 +4,7 @@ import zipfile
 import shutil
 import logging
 import re
+import platform
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -28,6 +29,17 @@ class UpdateManager:
         self.repo_name = repo_name
         self.update_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
     
+    def get_update_directory(self):
+        """Return the update directory path based on the platform."""
+        if platform.system() == "Darwin":  # macOS
+            base_dir = os.path.expanduser("~/Library/Application Support/CaseManager/updates")
+        elif platform.system() == "Windows":  # Windows
+            base_dir = os.path.join(os.getenv("LOCALAPPDATA", ""), "CaseManager", "updates")
+        else:  # Linux or others
+            base_dir = os.path.expanduser("~/.config/CaseManager/updates")
+
+        os.makedirs(base_dir, exist_ok=True)  # Ensure the directory exists
+        return base_dir
 
     def normalize_version(self, version):
         """Normalize the version string by stripping non-numeric prefixes."""
@@ -82,6 +94,9 @@ class UpdateManager:
     def apply_update(self, app_dir, update_dir):
         """Apply the downloaded update."""
         try:
+            if not update_dir:
+                update_dir = self.get_update_directory()
+
             logging.info("Applying update from: %s", update_dir)
             for item in os.listdir(update_dir):
                 source_path = os.path.join(update_dir, item)
@@ -109,6 +124,9 @@ class UpdateManager:
                     logging.info("Updating file: %s -> %s", source_path, dest_path)
                     shutil.copy2(source_path, dest_path)
 
+            # Clean up temporary update directory
+            shutil.rmtree(update_dir, ignore_errors=True)
+            logging.info("Temporary update directory cleaned up.")
             logging.info("Update applied successfully.")
             return True
         except Exception as e:
