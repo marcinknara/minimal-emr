@@ -77,6 +77,9 @@ class UpdateManager:
 
     def download_update(self, download_url, output_dir):
         try:
+            # Use custom update directory
+            if not output_dir:
+                output_dir = self.get_update_directory()  # Use user-specific directory
             logging.info("Starting update download from: %s", download_url)
             response = requests.get(download_url, stream=True)
             response.raise_for_status()
@@ -102,6 +105,13 @@ class UpdateManager:
         try:
             if not update_dir:
                 update_dir = self.get_update_directory()
+
+            # Determine app directory dynamically (for macOS and other platforms)
+            if platform.system() == "Darwin":  # macOS
+                app_dir = os.path.dirname(os.path.abspath(__file__))  # Path to the app bundle
+            elif platform.system() == "Windows":  # Windows
+                if not app_dir:  # Fallback in case `app_dir` is not passed
+                    app_dir = os.path.dirname(sys.executable)  # Executable location
 
             logging.info("Applying update from: %s", update_dir)
             for item in os.listdir(update_dir):

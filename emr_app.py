@@ -32,9 +32,11 @@ def load_local_version():
         try:
             with open(version_file, "r") as file:
                 data = json.load(file)
-                return data.get("version", "0.0.0")
+                return data.get("version", "0.0.0").lstrip("v")  # Strip "v" prefix for semantic comparison
         except json.JSONDecodeError:
+            logging.warning("Version file is invalid. Defaulting to 0.0.0.")
             return "0.0.0"
+    logging.warning("Version file not found. Defaulting to 0.0.0.")
     return "0.0.0"
 
 def save_local_version(version):
@@ -77,7 +79,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.13")
+        self.setWindowTitle("Case Manager v1.0.14")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
