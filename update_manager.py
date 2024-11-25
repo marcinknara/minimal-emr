@@ -5,6 +5,7 @@ import shutil
 import logging
 import re
 import platform
+from packaging.version import Version, InvalidVersion
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -24,7 +25,7 @@ setup_logging()
 
 class UpdateManager:
     def __init__(self, current_version, repo_owner, repo_name):
-        self.current_version = self.normalize_version(current_version)
+        self.current_version = current_version
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.update_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
@@ -42,9 +43,9 @@ class UpdateManager:
         return base_dir
 
     def normalize_version(self, version):
-        """Normalize the version string by stripping non-numeric prefixes."""
-        return re.sub(r'^[^\d]*', '', version)  # Remove any prefix before the first digit
-    
+        """Normalize the version string by removing prefixes like 'v'."""
+        return re.sub(r'^v', '', version)
+
     def check_for_updates(self):
         try:
             response = requests.get(self.update_url)
@@ -54,16 +55,21 @@ class UpdateManager:
             # Normalize version strings for comparison
             latest_version_raw = release_data["tag_name"]
             latest_version = self.normalize_version(latest_version_raw)
+            current_version = self.normalize_version(self.current_version)
 
             logging.debug(f"Comparing versions: current={self.current_version}, latest={latest_version}")
 
-
-            if self.current_version != latest_version:
-                download_url = release_data["assets"][0]["browser_download_url"]
-                logging.info(f"New version {latest_version} available!")
-                return latest_version, download_url
-            else:
-                logging.info("You are using the latest version.")
+             # Use packaging.version for semantic version comparison
+            try:
+                if Version(current_version) < Version(latest_version):
+                    download_url = release_data["assets"][0]["browser_download_url"]
+                    logging.info(f"New version {latest_version} available!")
+                    return latest_version, download_url
+                else:
+                    logging.info("You are using the latest version.")
+                    return None, None
+            except InvalidVersion as e:
+                logging.error(f"Invalid version encountered: {e}")
                 return None, None
         except Exception as e:
             logging.error(f"Failed to check for updates: {e}")
