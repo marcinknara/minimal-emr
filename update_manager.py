@@ -9,6 +9,7 @@ from packaging.version import Version, InvalidVersion
 import sys
 import psutil  # To check and terminate running processes
 import time
+import subprocess
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -25,6 +26,20 @@ def setup_logging():
     logging.debug("UpdateManager logging setup complete.")
 
 setup_logging()
+
+def wait_for_application_exit(app_name):
+    """Wait for the application process to terminate."""
+    logging.info(f"Waiting for {app_name} to exit...")
+    while True:
+        running = False
+        for process in psutil.process_iter(['name']):
+            if process.info['name'] == app_name:
+                running = True
+                break
+        if not running:
+            break
+        time.sleep(1)  # Check every second
+    logging.info(f"{app_name} has exited.") 
 
 
 class UpdateManager:
@@ -103,20 +118,6 @@ class UpdateManager:
         except Exception as e:
             logging.error(f"Failed to download update: {e}")
             return None
-        
-    def wait_for_application_exit(app_name):
-        """Wait for the application process to terminate."""
-        logging.info(f"Waiting for {app_name} to exit...")
-        while True:
-            running = False
-            for process in psutil.process_iter(['name']):
-                if process.info['name'] == app_name:
-                    running = True
-                    break
-            if not running:
-                break
-            time.sleep(1)  # Check every second
-        logging.info(f"{app_name} has exited.") 
 
     def apply_update(self, app_dir=None, update_dir=None):
         """Apply the downloaded update and restart the application."""
