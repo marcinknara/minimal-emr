@@ -3,6 +3,7 @@ import os
 import zipfile
 import shutil
 import logging
+import re
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -22,10 +23,15 @@ setup_logging()
 
 class UpdateManager:
     def __init__(self, current_version, repo_owner, repo_name):
-        self.current_version = current_version
+        self.current_version = self.normalize_version(current_version)
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.update_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+    
+
+    def normalize_version(self, version):
+        """Normalize the version string by stripping non-numeric prefixes."""
+        return re.sub(r'^[^\d]*', '', version)  # Remove any prefix before the first digit
     
     def check_for_updates(self):
         try:
@@ -33,7 +39,13 @@ class UpdateManager:
             response.raise_for_status()
             release_data = response.json()
             
-            latest_version = release_data["tag_name"]
+            # Normalize version strings for comparison
+            latest_version_raw = release_data["tag_name"]
+            latest_version = self.normalize_version(latest_version_raw)
+
+            logging.debug(f"Comparing versions: current={self.current_version}, latest={latest_version}")
+
+
             if self.current_version != latest_version:
                 download_url = release_data["assets"][0]["browser_download_url"]
                 logging.info(f"New version {latest_version} available!")
