@@ -3,7 +3,7 @@ import json
 import uuid
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, 
-    QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout, QCheckBox
+    QTableWidget, QTableWidgetItem, QMessageBox, QHBoxLayout, QCheckBox, QAction
 )
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.QtCore import Qt, QDate
@@ -18,6 +18,7 @@ import platform
 import subprocess
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+IS_DEV = os.getenv("ENV", "dev") == "prod"
 
 def get_version_file_path():
     """Return the path to the version.json file."""
@@ -76,7 +77,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.10")
+        self.setWindowTitle("Case Manager v1.0.12")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
@@ -116,9 +117,56 @@ class EMRManager(QMainWindow):
         # Add Edit Data button to settings
         edit_data_action = settings_menu.addAction("Edit Data")
         edit_data_action.triggered.connect(self.open_edit_data_screen)
+
+        # Add Check for Updates button to settings
+        check_updates_action = QAction("Check for Updates", self)
+        check_updates_action.triggered.connect(self.check_for_updates)
+        settings_menu.addAction(check_updates_action)
         
         # Load questions
         self.questions = self.load_questions()
+
+    def check_for_updates(self):
+        """Check for updates when the user clicks 'Check for Updates'."""
+        CURRENT_VERSION = load_local_version()
+        REPO_OWNER = "marcinknara"
+        REPO_NAME = "minimal-emr"
+
+        updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
+
+        # Initialize variables
+        latest_version = None
+        download_url = None
+
+        if not IS_DEV:
+            latest_version, download_url = updater.check_for_updates()
+        else:
+            logging.info("Development mode: Skipping update check.")
+            
+        if latest_version:
+            logging.info(f"New version available: {latest_version}")
+            reply = QMessageBox.question(
+                self,
+                "Update Available",
+                f"A new version ({latest_version}) is available. Do you want to download and install it now?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                output_dir = tempfile.gettempdir()
+                if updater.download_update(download_url, output_dir):
+                    if updater.apply_update(os.getcwd(), output_dir):
+                        save_local_version(latest_version)
+                        logging.info("Update applied successfully. Restarting now...")
+                        QMessageBox.information(self, "Update Successful", "The application will now restart.")
+                        restart_app()
+                    else:
+                        QMessageBox.critical(self, "Update Failed", "The update could not be applied.")
+                        logging.error("Failed to apply the update.")
+            else:
+                logging.info("User chose not to update.")
+        else:
+            QMessageBox.information(self, "No Updates", "You are already using the latest version.")
+            logging.info("No updates available.")
 
     def load_patients(self):
         try:
@@ -622,40 +670,9 @@ if __name__ == "__main__":
         logging.info("Application started.")
         app = QApplication(sys.argv)
         
-        # Current app version
-        CURRENT_VERSION = load_local_version()
-        logging.info("Current version: %s", CURRENT_VERSION)
-        
-        # GitHub repo info
-        REPO_OWNER = "marcinknara"
-        REPO_NAME = "minimal-emr"
-        
-        # Check for updates
-        updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
-        latest_version, download_url = updater.check_for_updates()
-        if latest_version:
-            logging.info("New version available: %s", latest_version)
-            reply = QMessageBox.question(
-                None,
-                "Update Available",
-                f"A new version ({latest_version}) is available. Do you want to download it now?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                output_dir = tempfile.gettempdir()
-                if updater.download_update(download_url, output_dir):
-                    if updater.apply_update(os.getcwd(), output_dir):
-                        save_local_version(latest_version)
-                        logging.info("Update applied successfully. Restarting now...")
-                        restart_app()
-                    else:
-                        logging.error("Failed to apply the update.")
-                        QMessageBox.critical(None, "Update Failed", "The update could not be applied.")
-        else:
-            logging.info("No updates available.")
-        
+        # Initialize main application window
         window = EMRManager()
         window.show()
         sys.exit(app.exec_())
     except Exception as e:
-        logging.error("Application error: %s", str(e))
+        logging.error(f"Application error: {e}")

@@ -3,6 +3,9 @@ import os
 import zipfile
 import shutil
 import logging
+import re
+import platform
+from packaging.version import Version, InvalidVersion
 
 # Add this to the top of update_manager.py
 def setup_logging():
@@ -27,19 +30,46 @@ class UpdateManager:
         self.repo_name = repo_name
         self.update_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
     
+    def get_update_directory(self):
+        """Return the update directory path based on the platform."""
+        if platform.system() == "Darwin":  # macOS
+            base_dir = os.path.expanduser("~/Library/Application Support/CaseManager/updates")
+        elif platform.system() == "Windows":  # Windows
+            base_dir = os.path.join(os.getenv("LOCALAPPDATA", ""), "CaseManager", "updates")
+        else:  # Linux or others
+            base_dir = os.path.expanduser("~/.config/CaseManager/updates")
+
+        os.makedirs(base_dir, exist_ok=True)  # Ensure the directory exists
+        return base_dir
+
+    def normalize_version(self, version):
+        """Normalize the version string by removing prefixes like 'v'."""
+        return re.sub(r'^v', '', version)
+
     def check_for_updates(self):
         try:
             response = requests.get(self.update_url)
             response.raise_for_status()
             release_data = response.json()
             
-            latest_version = release_data["tag_name"]
-            if self.current_version != latest_version:
-                download_url = release_data["assets"][0]["browser_download_url"]
-                logging.info(f"New version {latest_version} available!")
-                return latest_version, download_url
-            else:
-                logging.info("You are using the latest version.")
+            # Normalize version strings for comparison
+            latest_version_raw = release_data["tag_name"]
+            latest_version = self.normalize_version(latest_version_raw)
+            current_version = self.normalize_version(self.current_version)
+
+            logging.debug(f"Comparing versions: current={self.current_version}, latest={latest_version}")
+
+             # Use packaging.version for semantic version comparison
+            try:
+                if Version(current_version) < Version(latest_version):
+                    download_url = release_data["assets"][0]["browser_download_url"]
+                    logging.info(f"New version {latest_version} available!")
+                    return latest_version, download_url
+                else:
+                    logging.info("You are using the latest version.")
+                    return None, None
+            except InvalidVersion as e:
+                logging.error(f"Invalid version encountered: {e}")
                 return None, None
         except Exception as e:
             logging.error(f"Failed to check for updates: {e}")
@@ -70,6 +100,9 @@ class UpdateManager:
     def apply_update(self, app_dir, update_dir):
         """Apply the downloaded update."""
         try:
+            if not update_dir:
+                update_dir = self.get_update_directory()
+
             logging.info("Applying update from: %s", update_dir)
             for item in os.listdir(update_dir):
                 source_path = os.path.join(update_dir, item)
@@ -97,6 +130,9 @@ class UpdateManager:
                     logging.info("Updating file: %s -> %s", source_path, dest_path)
                     shutil.copy2(source_path, dest_path)
 
+            # Clean up temporary update directory
+            shutil.rmtree(update_dir, ignore_errors=True)
+            logging.info("Temporary update directory cleaned up.")
             logging.info("Update applied successfully.")
             return True
         except Exception as e:
