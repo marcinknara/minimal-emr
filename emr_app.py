@@ -13,7 +13,7 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
 import logging
-from update_manager import UpdateManager
+from updater import UpdateManager
 import platform
 import subprocess
 
@@ -79,7 +79,7 @@ setup_logging()
 class EMRManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Case Manager v1.0.20")
+        self.setWindowTitle("Case Manager v1.0.21")
         self.setGeometry(100, 100, 900, 600)
         
         # Main layout
@@ -136,10 +136,6 @@ class EMRManager(QMainWindow):
 
         updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
 
-        # Initialize variables
-        latest_version = None
-        download_url = None
-
         if not IS_DEV:
             latest_version, download_url = updater.check_for_updates()
         else:
@@ -160,7 +156,7 @@ class EMRManager(QMainWindow):
                 if extracted_dir:
                     # Launch the updater
                     app_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-                    updater_path = os.path.join(app_dir, "update_manager.py")
+                    updater_path = os.path.join(app_dir, "updater.py")
 
                     logging.info("Launching updater...")
                     subprocess.Popen(
