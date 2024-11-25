@@ -13,38 +13,10 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
 import logging
-from updater import UpdateManager
 import platform
-import subprocess
+from fpdf import FPDF  # Import the FPDF library for PDF creation
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-IS_DEV = os.getenv("ENV", "dev") == "prod"
-
-def get_version_file_path():
-    """Return the path to the version.json file."""
-    return get_user_data_path("version.json")
-
-def load_local_version():
-    """Load the local version from the version.json file."""
-    version_file = get_version_file_path()
-    logging.info(f"Loading version from {version_file}")  # Debugging log
-    if os.path.exists(version_file):
-        try:
-            with open(version_file, "r") as file:
-                data = json.load(file)
-                return data.get("version", "0.0.0").lstrip("v")  # Strip "v" prefix for semantic comparison
-        except json.JSONDecodeError:
-            logging.warning("Version file is invalid. Defaulting to 0.0.0.")
-            return "0.0.0"
-    logging.warning("Version file not found. Defaulting to 0.0.0.")
-    return "0.0.0"
-
-def save_local_version(version):
-    """Save the current version to the version.json file."""
-    version_file = get_version_file_path()
-    logging.info(f"Saving version {version} to {version_file}")  # Debugging log
-    with open(version_file, "w") as file:
-        json.dump({"version": version}, file)
 
 def get_user_data_path(filename):
     """Get the absolute path to store user-specific resource files."""
@@ -120,61 +92,8 @@ class EMRManager(QMainWindow):
         edit_data_action = settings_menu.addAction("Edit Data")
         edit_data_action.triggered.connect(self.open_edit_data_screen)
 
-        # Add Check for Updates button to settings
-        check_updates_action = QAction("Check for Updates", self)
-        check_updates_action.triggered.connect(self.check_for_updates)
-        settings_menu.addAction(check_updates_action)
-        
         # Load questions
         self.questions = self.load_questions()
-
-    def check_for_updates(self):
-        """Check for updates when the user clicks 'Check for Updates'."""
-        CURRENT_VERSION = load_local_version()
-        REPO_OWNER = "marcinknara"
-        REPO_NAME = "minimal-emr"
-
-        updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
-
-        if not IS_DEV:
-            latest_version, download_url = updater.check_for_updates()
-        else:
-            logging.info("Development mode: Skipping update check.")
-            return
-
-        if latest_version:
-            logging.info(f"New version available: {latest_version}")
-            reply = QMessageBox.question(
-                self,
-                "Update Available",
-                f"A new version ({latest_version}) is available. Do you want to download and install it now?",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if reply == QMessageBox.Yes:
-                output_dir = tempfile.gettempdir()
-                extracted_dir = updater.download_update(download_url, output_dir)
-                if extracted_dir:
-                    # Launch the updater
-                    app_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-                    updater_path = os.path.join(app_dir, "updater.py")
-
-                    logging.info("Launching updater...")
-                    subprocess.Popen(
-                        [sys.executable, updater_path, app_dir, extracted_dir],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    logging.info("Exiting application for updater...")
-                    QMessageBox.information(self, "Updating", "The application will now close to apply the update.")
-                    sys.exit(0)  # Terminate the application
-                else:
-                    QMessageBox.critical(self, "Update Failed", "The update could not be downloaded.")
-                    logging.error("Failed to download the update.")
-            else:
-                logging.info("User chose not to update.")
-        else:
-            QMessageBox.information(self, "No Updates", "You are already using the latest version.")
-            logging.info("No updates available.")
 
     def load_patients(self):
         try:
@@ -218,7 +137,7 @@ class EMRManager(QMainWindow):
                 data_button.clicked.connect(lambda _, uuid_key=uuid_key: self.open_data_screen(uuid_key))
                 self.patient_table.setCellWidget(row, 2, data_button)
             except Exception as e:
-                QMessageBox.warning(self, "Error", f"Error populating patient row {i}: {str(e)}")
+                QMessageBox.warning(self, "Error", f"Error populating patient row: {str(e)}")
         self.patient_table.blockSignals(False)
     
     def update_patient_data(self, row, column):
@@ -282,7 +201,6 @@ class EMRManager(QMainWindow):
         del self.patients[patient_uuid]
         self.save_patients()
         self.populate_table()
-    
     
     def load_questions(self):
         path = get_user_data_path("questions.json")
@@ -373,6 +291,10 @@ class DataScreen(QWidget):
         export_button = QPushButton("Export to Excel")
         export_button.clicked.connect(self.export_to_excel)
         layout.addWidget(export_button)
+
+        export_to_pdf_button = QPushButton("Export to PDF")
+        export_to_pdf_button.clicked.connect(self.export_to_pdf)
+        layout.addWidget(export_to_pdf_button)
         
         self.setLayout(layout)
         self.update_chart()
@@ -569,6 +491,70 @@ class DataScreen(QWidget):
             if os.path.exists(chart_image_path):
                 os.remove(chart_image_path)
 
+    def export_to_pdf(self):
+        """Export patient data to a PDF file."""
+        try:
+            start_date_str = self.start_date.toString("yyyy-MM-dd")
+            end_date_str = self.end_date.toString("yyyy-MM-dd")
+            file_name = f"{self.patient['name']}_{start_date_str}_to_{end_date_str}_data.pdf"
+            save_path, _ = QFileDialog.getSaveFileName(
+                self, "Save PDF", file_name, "PDF Files (*.pdf)"
+            )
+            if not save_path:
+                return
+
+            pdf = FPDF(orientation="P", unit="mm", format="A4")
+            pdf.set_auto_page_break(auto=True, margin=15)
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+
+            # Add patient information
+            pdf.set_font("Arial", style="B", size=14)
+            pdf.cell(0, 10, f"Patient Name: {self.patient['name']}", ln=True)
+            pdf.cell(0, 10, f"Patient Age: {self.patient['age']}", ln=True)
+            pdf.cell(0, 10, f"Date Range: {start_date_str} to {end_date_str}", ln=True)
+            pdf.ln(10)
+
+            # Add table headers
+            pdf.set_font("Arial", style="B", size=12)
+            column_widths = [50, 25, 25, 25, 25, 25]  # Adjust to fit A4 size
+            pdf.cell(column_widths[0], 10, "Question", border=1)
+            for day in DAYS_OF_WEEK:
+                pdf.cell(column_widths[1], 10, day, border=1)
+            pdf.ln()
+
+            # Add table data
+            pdf.set_font("Arial", size=12)
+            week_key = f"{start_date_str}_to_{end_date_str}"
+            week_data = self.patient_data.get(week_key, {})
+
+            for question in self.questions:
+                pdf.cell(column_widths[0], 10, question["text"], border=1)
+                for day in DAYS_OF_WEEK:
+                    value = week_data.get(question["text"], {}).get(day, "")
+                    pdf.cell(column_widths[1], 10, str(value), border=1)
+                pdf.ln()
+
+            # Add chart image
+            temp_dir = tempfile.gettempdir()
+            chart_image_path = os.path.join(temp_dir, "chart.png")
+            try:
+                chart_pixmap = self.chart_view.grab()
+                chart_pixmap.save(chart_image_path)
+                pdf.ln(10)  # Add spacing before the chart
+                pdf.image(chart_image_path, x=10, y=pdf.get_y(), w=180)  # Fit chart within page width
+            except Exception as e:
+                QMessageBox.warning(self, "Warning", f"Failed to add chart image: {str(e)}")
+            finally:
+                if os.path.exists(chart_image_path):
+                    os.remove(chart_image_path)
+
+            # Save the PDF
+            pdf.output(save_path)
+            QMessageBox.information(self, "Exported", f"Data exported to {save_path}.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export data to PDF: {str(e)}")
+
 class EditDataScreen(QWidget):
     def __init__(self, questions, save_questions_callback):
         super().__init__()
@@ -663,15 +649,6 @@ class EditDataScreen(QWidget):
         self.save_questions_callback(self.questions)
         QMessageBox.information(self, "Saved", "Data points have been updated successfully.")
         self.close()
-
-def restart_app():
-    """Restart the application."""
-    try:
-        logging.info("Restarting application...")
-        subprocess.Popen([sys.executable] + sys.argv)
-        sys.exit(0)
-    except Exception as e:
-        logging.error("Failed to restart application: %s", str(e))
 
 if __name__ == "__main__":
     try:
