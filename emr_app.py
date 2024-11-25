@@ -18,6 +18,7 @@ import platform
 import subprocess
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+IS_DEV = os.getenv("ENV", "dev") == "dev"
 
 def get_version_file_path():
     """Return the path to the version.json file."""
@@ -132,8 +133,13 @@ class EMRManager(QMainWindow):
         REPO_NAME = "minimal-emr"
 
         updater = UpdateManager(CURRENT_VERSION, REPO_OWNER, REPO_NAME)
-        latest_version, download_url = updater.check_for_updates()
 
+        if not IS_DEV:
+            latest_version, download_url = updater.check_for_updates()
+            # Proceed with update logic
+        else:
+            logging.info("Development mode: Skipping update check.")
+            
         if latest_version:
             logging.info(f"New version available: {latest_version}")
             reply = QMessageBox.question(

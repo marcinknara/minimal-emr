@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Distribution / Build directories
+dist/
+build/
+
+# Executables
+*.exe
+*.dll
+*.so
+*.dylib
+*.dmg
+
+# Temporary files and directories
+*.tmp
+*.log
+*.swp
+*.swo
+*.DS_Store
+*.bak
+
+# PyInstaller generated files
+*.spec
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows specific files
+Thumbs.db
+Desktop.ini
+
+# CaseManager-specific folders
+apiversions-*
+BlobRegistryFiles-*
+contentlinkingd/
+loading/
+mobiletimerd/
+ptpcamerad/
+studentd/
+talagent/
+voidptr-*/
+sip_array-*/
+
+# Virtual environment
+venv/
+
+# Installer files
+CaseManagerInstaller/
+CaseManager.pkg
