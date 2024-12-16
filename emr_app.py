@@ -13,23 +13,26 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image
 import tempfile
 import logging
-import platform
+import os
 from fpdf import FPDF  # Import the FPDF library for PDF creation
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 def get_user_data_path(filename):
     """Get the absolute path to store user-specific resource files."""
-    if platform.system() == "Windows":
+    # Determine the base path depending on the operating system
+    if os.name == "nt":  # Windows
         base_path = os.getenv("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
-    elif platform.system() == "Darwin":  # macOS
+    elif sys.platform == "darwin":  # macOS
         base_path = os.path.expanduser("~/Library/Application Support")
-    else:  # Linux or other
+    else:  # Assume Linux or other Unix-based system
         base_path = os.path.expanduser("~/.config")
 
+    # Create the application-specific directory if it doesn't exist
     app_folder = os.path.join(base_path, "CaseManager")
     os.makedirs(app_folder, exist_ok=True)
 
+    # Return the full path for the file
     return os.path.join(app_folder, filename)
 
 
