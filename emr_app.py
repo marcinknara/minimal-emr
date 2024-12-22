@@ -22,7 +22,7 @@ import tarfile
 import stat
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-VERSION = "v1.0.21"
+VERSION = "v1.0.22"
 
 
 def get_user_data_path(filename):
