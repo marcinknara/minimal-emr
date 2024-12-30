@@ -2,11 +2,45 @@
 
 This application allows case managers to track and manage patient data locally.
 
-How to Use:
-1. Extract the ZIP file.
-2. Run the application by double-clicking the executable:
-   - Windows: `emr_app.exe`
-   - macOS/Linux: `emr_app`
+HOW TO USE:
+
+On Windows:
+1. Download {APP_NAME}_windows.zip file
+2. Unzip downloaded file
+
+On MAC:
+1. Download {APP_NAME}_macos.tar.gz file
+2. In the terminal, go to the directory where you downloaded the file
+3. Run this command 
+```
+tar -xzvf {APP_NAME}_macos.tar.gz
+```
+
+HOW TO BUILD:
+
+On Windows:
+1. Go to the app directory
+2. Delete build, dist, {APP_NAME}.spec directories/files
+3. Run this command
+```
+ pyinstaller --onefile --noconsole --clean --windowed  --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
+```
+4. After that ZIP dist directory and name of this ZIP should be {APP_NAME}_windows.zip
+
+On MAC:
+1. Go to the app directory
+2. Run this command
+```
+pyinstaller --onefile --noconsole --clean --windowed  --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
+```
+3. After that run these commands:
+```
+cd dist
+```
+```
+tar -czvf CaseManager.tar.gz CaseManager.app
+```
+
 
 Features:
 - Add/Edit/Delete patients.
@@ -51,7 +85,8 @@ python emr_app.py
 ```
 
 ## Build
-pyinstaller --onefile --noconsole --windowed --hidden-import=Pillow --hidden-import=PyQt5.QtChart --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
+pyinstaller --onefile --noconsole --clean --windowed  --name CaseManager --icon=assets/casemanager_icon.ico emr_app.py
+
 
 ## License
 
