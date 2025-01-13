@@ -20,9 +20,13 @@ import os
 from fpdf import FPDF  # Import the FPDF library for PDF creation
 import tarfile
 import stat
+import platform
 
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-VERSION = "v1.0.25"
+VERSION = "v1.0.31"
+
+if getattr(sys, 'frozen', False):  # If running as a PyInstaller bundle
+    os.environ['QT_PLUGIN_PATH'] = os.path.join(sys._MEIPASS, 'PyQt5', 'Qt5', 'plugins')
 
 
 def get_user_data_path(filename):
@@ -283,23 +287,27 @@ class EMRManager(QMainWindow):
             logging.error(f"Update failed: {e}")
 
     def get_current_version(self):
-        """Read the current version from version.json."""
-        try:
-            current_dir = os.getcwd()
-            parent_directory = os.path.abspath(os.path.join(current_dir, ".."))
-            version_file_dir = os.path.join(parent_directory, 'version.json')
+        """Return the current version from the VERSION variable."""
+        return VERSION
 
-            if platform.system() == 'Darwin':
-                current_exe = sys.executable
-                app_dir = os.path.dirname(current_exe)
-                version_file_dir = os.path.join(app_dir, 'version.json')
+    # def get_current_version(self):
+    #     """Read the current version from version.json."""
+    #     try:
+    #         current_dir = os.getcwd()
+    #         parent_directory = os.path.abspath(os.path.join(current_dir, ".."))
+    #         version_file_dir = os.path.join(parent_directory, 'version.json')
 
-            with open(version_file_dir, "r") as version_file:
-                version_data = json.load(version_file)
-                return version_data.get("version", "0.0.0")
-        except (FileNotFoundError, json.JSONDecodeError):
-            # QMessageBox.warning(self, "Error", "Version file not found or corrupted. Assuming version 0.0.0.")
-            return "0.0.0"
+    #         if platform.system() == 'Darwin':
+    #             current_exe = sys.executable
+    #             app_dir = os.path.dirname(current_exe)
+    #             version_file_dir = os.path.join(app_dir, 'version.json')
+
+    #         with open(version_file_dir, "r") as version_file:
+    #             version_data = json.load(version_file)
+    #             return version_data.get("version", "0.0.0")
+    #     except (FileNotFoundError, json.JSONDecodeError):
+    #         # QMessageBox.warning(self, "Error", "Version file not found or corrupted. Assuming version 0.0.0.")
+    #         return "0.0.0"
 
     def load_patients(self):
         try:
